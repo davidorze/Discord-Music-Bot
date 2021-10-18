@@ -28,8 +28,7 @@ botToken = os.getenv('BOT_TOKEN')
 #track = sp.track('https://open.spotify.com/track/6sH0zEauzk2ih4kGWQliQL?si=da7682a0355c47ec')
 #pprint(track)
 
-#musixmatch = Musixmatch('ca22bd1f9ec2a723c5a4fef028f6fade')
-genius = lg.Genius('zlRbbjMZeis_ciZwAW_PUPEm1Z6p3VSajUVut94q-SgkSgcVw6yK4sB3NniwWtiZ', skip_non_songs=True, excluded_terms=["(Remix)", "(Live)"], remove_section_headers=True)
+genius = lg.Genius('GENIUS_TOKEN', skip_non_songs=True, excluded_terms=["(Remix)", "(Live)"], remove_section_headers=True)
 client = commands.Bot(command_prefix='\\', case_insensitive=True, intents=intents)
 queues = defaultdict(list)
 infos = defaultdict(list)
@@ -91,15 +90,12 @@ def parse_duration(duration: int):
 
 @client.command(aliases=['j'], description='Faz o bot entrar em seu canal de voz atual')
 async def join(ctx):
-    #if message in ctx: await ctx.message.delete()
+    try: await ctx.message.delete()
+    except: None
     try:
         channel = ctx.author.voice.channel
         print(channel)
         await channel.connect()
-        #voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
-        #await voice.change_voice_state(self_mute=False, self_deaf=True)
-        #print(discord.utils.get(client.voice_clients, ))
-        checkIfAlone.start(ctx)
     except:
         if discord.utils.get(client.voice_clients, guild=ctx.guild): await ctx.channel.send('O Bot já está conectado no canal ' + str(discord.utils.get(client.voice_clients, guild=ctx.guild).channel.name) + '!')
         else: await ctx.channel.send('Você não está conectado em nenhum canal de voz! Conecte-se e tente novamente.')
