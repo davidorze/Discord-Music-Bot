@@ -38,7 +38,7 @@ notPlaying = 0
 
 
 
-@client.command(aliases=['tp'])
+@client.command(aliases=['tp'], hidden=True)
 async def testplay(ctx, *, url: str):
     global infos
     global queues
@@ -80,7 +80,8 @@ def parse_duration(duration: int):
         duration.append('{} seconds'.format(seconds))
     i = 0
     for n in duration:
-        if (i == 0 and n[5:] == 'hours' and int(n[:2]) < 10): tempo = n[:1]
+        if (i == 0 and n[-5:] == 'hours' and int(n[:2]) < 10): tempo = n[:1]
+        elif (i == 0 and int(n[:2]) < 10): tempo = n[:1]
         elif (i == 0): tempo = n[:2]
         elif (int(n[:2]) < 10): tempo += ':0' + n[:2]
         else: tempo += ':' + n[:2]
@@ -90,14 +91,14 @@ def parse_duration(duration: int):
 
 @client.command(aliases=['j'], description='Faz o bot entrar em seu canal de voz atual')
 async def join(ctx):
-    try: await ctx.message.delete()
-    except: None
+    #try: await ctx.message.delete()
     try:
         channel = ctx.author.voice.channel
         print(channel)
         await channel.connect()
+        checkIfAlone.start(ctx)
     except:
-        if discord.utils.get(client.voice_clients, guild=ctx.guild): await ctx.channel.send('O Bot já está conectado no canal ' + str(discord.utils.get(client.voice_clients, guild=ctx.guild).channel.name) + '!')
+        if (discord.utils.get(client.voice_clients, guild=ctx.guild).is_playing()): await ctx.channel.send('O Bot já está conectado no canal ' + str(discord.utils.get(client.voice_clients, guild=ctx.guild).channel.name) + '!')
         else: await ctx.channel.send('Você não está conectado em nenhum canal de voz! Conecte-se e tente novamente.')
     #channel = discord.utils.get(ctx.guild.voice_channels, name='geral')
     
@@ -108,8 +109,7 @@ async def play(ctx, *, url: str):
     global queues
     id = ctx.guild.id
     userID = ctx.author.id
-    await ctx.message.delete()
-    ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True}
+    ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True, 'playlist_items':'1'}
     async with ctx.channel.typing():
      with youtube_dl.YoutubeDL(ydl_opts) as ydl:
          video = ydl.extract_info(url, download=False)
@@ -120,24 +120,31 @@ async def play(ctx, *, url: str):
          #    pprint(video)
          #    sys.stdout = original_stdout # Reset the standard output to its original value
          #pprint(video)
-     create_playlist(video, id, userID, False)
+         create_playlist(video, id, userID, False)
      voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
-     if (voice == None):
-         await join(ctx)
-         voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
-     try:
-         if not voice.is_playing():
-             print('not playing')
-             if voice.is_paused(): await resume(ctx)
-             else:
-                 print('call')
-                 await call_play(ctx.channel, id, voice, ctx)
-                 await ctx.channel.send(infos[id][0]['song'] + ' está tocando!', delete_after=35)
-         elif voice.is_playing():
-             j = len(infos[id])-1
-             await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!', delete_after=35)
-     except:
-         await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
+    if (voice == None):
+        await join(ctx)
+        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    try:
+        if not voice.is_playing():
+            #print('not playing')
+            if voice.is_paused(): await resume(ctx)
+            else:
+                #print('call')
+                await call_play(ctx.channel, id, voice, ctx)
+                await ctx.channel.send(infos[id][0]['song'] + ' está tocando!')
+        elif voice.is_playing():
+            j = len(infos[id])-1
+            await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!')
+    except:
+        await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
+    if '_type' in video:
+        ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True}
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            video = ydl.extract_info(url, download=False)
+            create_playlist(video, id, userID, False)
+            await remove(ctx, 1, True)
+
 
 @client.command(aliases=['s'])
 async def search(ctx, *, url: str):
@@ -154,12 +161,19 @@ async def search(ctx, *, url: str):
         video = ydl.extract_info(url, download=False)
     if '_type' in video and len(video['entries']) == 10:
         await askAfterSearch(video, id, userID, ctx)
-    if not voice.is_playing():
-        await call_play(ctx.channel, id, voice, ctx)
-        await ctx.channel.send(infos[id][0]['song'] + ' está tocando!')
-    elif voice.is_playing():
-        j = len(infos[id])-1
-        await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!')
+    try:
+         if not voice.is_playing():
+             #print('not playing')
+             if voice.is_paused(): await resume(ctx)
+             else:
+                 #print('call')
+                 await call_play(ctx.channel, id, voice, ctx)
+                 await ctx.channel.send(infos[id][0]['song'] + ' está tocando!')
+         elif voice.is_playing():
+             j = len(infos[id])-1
+             await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!')
+    except:
+         await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
 
 def create_playlist(video, id, userID, isPlayNow):
     global infos
@@ -182,7 +196,7 @@ def create_playlist(video, id, userID, isPlayNow):
             except: info[i].update({'artist': ''})
             i += 1
     elif 'entries' in video:
-        print('pesquisa de 6')
+        print('pesquisa')
         i = 0
         for ent in video['entries']:
             info[i] = (ent['formats'][0])
@@ -199,17 +213,25 @@ def create_playlist(video, id, userID, isPlayNow):
             i += 1
     elif 'formats' in video:
         print('link')
+        pprint(video)
         info[0] = video['formats'][0]
+        print('fez info00')
         info[0].update({'duration': video['duration'], 'id': video['id']})
-        try: info[0].update({'title': video['track']})
-        except:
-           if any('artist' in ele for ele in ent): info[0].update({'title': ent['title'].replace(ent['artist'], '')})
-           else: info[0].update({'title': ent['title']})
+        print('fez info01')
         try:
             artists = re.sub("[^\w' ]", "", ent['artist']).split("  ")
             pprint(artists)
             info[0].update({'artist': artists[0]})
-        except: info[0].update({'artist': ''})
+        except: 
+            info[0].update({'artist': ''})
+            print('n tem artist')
+        try: 
+            info[0].update({'title': video['track']})
+            print('tem track')
+        except:
+           print('n tem track')
+           if any('artist' in ele for ele in video): info[0].update({'title': video['title'].replace(video['artist'], '')})
+           else: info[0].update({'title': video['title']})
     elif 'uploader' in video:
         print('testando not YT')
         info[0] = video
@@ -253,18 +275,16 @@ async def askAfterSearch(video, id, userID, ctx):
                 embed.add_field(name=str(i) + ' - ' + song['title'], value=('Duração: ' + tempo), inline=False)
             except:
                 tempo = '∞'
-                embed.add_field(name=str(i) + ' - ' + song['title'][:-17], value=('Duração: ' + tempo), inline=False)
+                if song['title'] is not None: embed.add_field(name=str(i) + ' - ' + song['title'][:-17], value=('Duração: ' + tempo), inline=False)
             i += 1
     await ctx.channel.send(embed=embed, delete_after=120)
     def check(m):
-        return (m.content == '1' or '2' or '3' or '4' or '5' or '6' or '7' or '8' or '9' or '10') and m.channel == ctx.channel
+        return (m.content == '1' or '2' or '3' or '4' or '5' or '6' or '7' or '8' or '9' or '10') and m.channel == ctx.channel and m.author == ctx.author
     try:
         msg = await client.wait_for('message', check=check, timeout=120)
     except:
         await ctx.channel.send('Nenhuma música foi selecionada!', delete_after=60)
     video = video['entries'][int(msg.content)-1]
-    #pprint(video)
-    #await ctx.channel.send(video['formats'] + ' adicionada na fila!')
     create_playlist(video, id, userID, False)
 
 def start_playing(canal, id, voice, ctx):
@@ -293,7 +313,6 @@ async def call_play(canal, id, voice, ctx):
 
 @client.command(aliases=['next', 'sk'])
 async def skip(ctx):
-    await ctx.message.delete()
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
     id = ctx.guild.id
     voice.stop()
@@ -326,14 +345,15 @@ async def queue(ctx):
     global infos
     global queues
     id = ctx.guild.id
-    await ctx.message.delete()
+    try: await ctx.message.delete()
+    except: None
     async with ctx.channel.typing():
         embed=discord.Embed(title="Fila", description="Essas são as próximas músicas a tocar:", color=0x7cb84f)
         try:
            tempoSong[id] = round(time.time() - start[id])
         except:
             tempoSong[id] = 0
-            print('Ainda não tocou nada')
+            #print('Ainda não tocou nada')
         i = 0
         if len(infos[id])==0: embed=discord.Embed(title="A Fila está vazia!", description="Use o comando \'play\' para adicionar mais músicas!", color=0x7cb84f)
         else:
@@ -344,7 +364,7 @@ async def queue(ctx):
                 elif (i > 0) and song['artist'] == '': embed.add_field(name=str(i) + ' - ' + song['song'] + '\nDuração: ' + song['duration'], value=('Adicionado por: ' + song['user']), inline=False)
                 i += 1
         try:
-            await ctx.channel.send(embed=embed, delete_after=35)
+            await ctx.channel.send(embed=embed)
         except:
             await ctx.channel.send(embed=embed)
 
@@ -353,6 +373,7 @@ async def leave(ctx):
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
     try:
         await voice.disconnect()
+        checkIfAlone.cancel()
     except:
         await ctx.channel.send('O Bot não está conectado em nenhum canal do servidor!')
 
@@ -377,18 +398,19 @@ async def resume(ctx):
         await ctx.channel.send('O Bot não está com tocando nada!')
 
 @client.command()
-async def remove(ctx, item: int):
+async def remove(ctx, item: int, isDuplicate=False):
     global infos
     global queues
     id = ctx.guild.id
     if len(infos[id]) > item > 0:
         try:
             queues[id].pop(item-1)
-            await ctx.channel.send('Removendo música ' + str(infos[id].pop(item)['song']) + ' da lista!')
+            if(not isDuplicate): await ctx.channel.send('Removendo música ' + str(infos[id].pop(item)['song']) + ' da lista!')
         except:
-            await ctx.channel.send('O Bot não tem nada na fila!')
+            if(not isDuplicate): await ctx.channel.send('O Bot não tem nada na fila!')
     else:
-        await ctx.channel.send('Escreva um número dentro da fila!')
+        if(not isDuplicate): await ctx.channel.send('Escreva um número dentro da fila!')
+
 @client.command(aliases=['parar'])
 async def stop(ctx):
     global infos
@@ -448,19 +470,19 @@ async def on_ready():
 #    await message.channel.send('Hello!')
 #    await join(message)
 
-async def on_voice_state_update(member, before, after):
-    global notPlaying
-    print('Update')
+#async def on_voice_state_update(member, before, after):
+#    global notPlaying
+#    print('Update')
     
-    voice = member.guild.voice_client
-    if voice is None:
-        # Exiting if the bot it's not connected to a voice channel
-        return 
-    if not voice.is_playing() and notPlaying == 10:
-       notPlaying = 0
-       await leave(ctx)
-    if len(voice.channel.members) == 19821:
-       await leave(ctx)
+#    voice = member.guild.voice_client
+#    if voice is None:
+#        # Exiting if the bot it's not connected to a voice channel
+#        return 
+#    if not voice.is_playing() and notPlaying == 10:
+#       notPlaying = 0
+#       await leave(ctx)
+#    if len(voice.channel.members) == 19821:
+#       await leave(ctx)
 
 @tasks.loop(seconds = 60)
 async def checkIfAlone(ctx):
