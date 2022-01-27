@@ -28,14 +28,13 @@ botToken = os.getenv('BOT_TOKEN')
 #track = sp.track('https://open.spotify.com/track/6sH0zEauzk2ih4kGWQliQL?si=da7682a0355c47ec')
 #pprint(track)
 
-genius = lg.Genius('GENIUS_TOKEN', skip_non_songs=True, excluded_terms=["(Remix)", "(Live)"], remove_section_headers=True)
+genius = lg.Genius(os.getenv('GENIUS_TOKEN'), skip_non_songs=True, excluded_terms=["(Remix)", "(Live)"], remove_section_headers=True)
 client = commands.Bot(command_prefix='\\', case_insensitive=True, intents=intents)
 queues = defaultdict(list)
 infos = defaultdict(list)
 tempoSong = {}
 start = {}
 notPlaying = 0
-
 
 
 @client.command(aliases=['tp'], hidden=True)
@@ -74,16 +73,15 @@ def parse_duration(duration: int):
         duration.append('{} days'.format(days))
     if hours > 0:
         duration.append('{} hours'.format(hours))
-    if minutes > 0:
-        duration.append('{} minutes'.format(minutes))
-    if seconds > 0:
-        duration.append('{} seconds'.format(seconds))
+    duration.append('{} minutes'.format(minutes))
+    duration.append('{} seconds'.format(seconds))
     i = 0
     for n in duration:
         if (i == 0 and n[-5:] == 'hours' and int(n[:2]) < 10): tempo = n[:1]
-        elif (i == 0 and int(n[:2]) < 10): tempo = n[:1]
+        elif (i == 0 and n[-5:] == 'hours'): tempo = n[:2]
+        elif (i == 0 and int(n[:2]) < 10): tempo = '0' + n[:1]
         elif (i == 0): tempo = n[:2]
-        elif (int(n[:2]) < 10): tempo += ':0' + n[:2]
+        elif (int(n[:2]) < 10): tempo += ':0' + n[:1]
         else: tempo += ':' + n[:2]
         i += 1
             
