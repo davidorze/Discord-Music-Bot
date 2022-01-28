@@ -279,7 +279,6 @@ def appendToList(info, id, userID, isPlayNow):
     global infos
     global queues
     for i in range(len(info)):
-        queues[id].append(info[i]['url'])
 
         tempo = '∞'
         try:
@@ -292,8 +291,10 @@ def appendToList(info, id, userID, isPlayNow):
                             'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']}
 
         if isPlayNow:
+            queues[id].insert(0,info[i]['url'])
             infos[id].insert(1, musicItem)
         else:
+            queues[id].append(info[i]['url'])
             infos[id].append(musicItem)
 
 
