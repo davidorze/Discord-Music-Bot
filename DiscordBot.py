@@ -292,9 +292,10 @@ def appendToList(info, id, userID, isPlayNow):
                             'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']}
 
         if isPlayNow:
-            infos[id].append(musicItem)
-        else:
             infos[id].insert(1, musicItem)
+        else:
+            infos[id].append(musicItem)
+
 
 
 
