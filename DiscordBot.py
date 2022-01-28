@@ -322,12 +322,17 @@ async def askAfterSearch(video, id, userID, ctx):
     await ctx.channel.send(embed=embed, delete_after=120)
 
     def check(m):
-        return (m.content == '1' or '2' or '3' or '4' or '5' or '6' or '7' or '8' or '9' or '10') and m.channel == ctx.channel and m.author == ctx.author
+        return m.content.isnumeric() and m.channel == ctx.channel and m.author == ctx.author
     try:
         msg = await client.wait_for('message', check=check, timeout=120)
     except:
         await ctx.channel.send('Nenhuma música foi selecionada!', delete_after=60)
-    video = video['entries'][int(msg.content)-1]
+
+    try:
+        video = video['entries'][int(msg.content)-1]
+    except:
+        await ctx.channel.send('Valor indisponível!', delete_after=60)
+
     create_playlist(video, id, userID, False)
 
 
