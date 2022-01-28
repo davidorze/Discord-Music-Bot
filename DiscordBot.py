@@ -273,31 +273,24 @@ def create_playlist(video, id, userID, isPlayNow):
 def appendToList(info, id, userID, isPlayNow):
     global infos
     global queues
-    i = 0
-    if isPlayNow:
-        while i < len(info):
-            queues[id].insert(0, info[i]['url'])
-            try:
-                tempo = parse_duration(info[i]['duration'])
-                infos[id].insert(1, {'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'], 'duration': tempo,
-                                 'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']})
-            except:
-                tempo = '∞'
-                infos[id].insert(1, {'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'][:-17],
-                                 'duration': tempo, 'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']})
-            i += 1
-    else:
-        while i < len(info):
-            queues[id].append(info[i]['url'])
-            try:
-                tempo = parse_duration(info[i]['duration'])
-                infos[id].append({'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'], 'duration': tempo,
-                                 'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']})
-            except:
-                tempo = '∞'
-                infos[id].append({'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'][:-17], 'duration': tempo,
-                                 'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']})
-            i += 1
+    for i in range(len(info)):
+        queues[id].append(info[i]['url'])
+
+        tempo = '∞'
+        try:
+            tempo = parse_duration(info[i]['duration'])
+        except:
+            pass
+
+        # Pega só os primeiros 20 letras para o titulo
+        musicItem = {'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'][:20], 'duration': tempo,
+                            'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']}
+
+        if isPlayNow:
+            infos[id].append(musicItem)
+        else:
+            infos[id].insert(1, musicItem)
+
 
 
 async def askAfterSearch(video, id, userID, ctx):
