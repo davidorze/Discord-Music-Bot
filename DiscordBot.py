@@ -73,13 +73,18 @@ def parse_duration(duration: int):
     hours, minutes = divmod(minutes, 60)
     days, hours = divmod(hours, 24)
 
-    duration = []
+    tempo = ""
     if days > 0:
-        duration.append('{} days'.format(days))
+        tempo = "{:02d}:".format(days)
     if hours > 0:
-        duration.append('{} hours'.format(hours))
-    duration.append('{} minutes'.format(minutes))
-    duration.append('{} seconds'.format(seconds))
+        tempo += "{:02d}:".format(hours)
+
+    tempo += "{:02d}:".format(minutes)
+    tempo += "{:02d}".format(seconds)
+
+    
+    '''
+    # Guardar esse código para a posterioridade
     i = 0
     for n in duration:
         if (i == 0 and n[-5:] == 'hours' and int(n[:2]) < 10):
@@ -95,7 +100,7 @@ def parse_duration(duration: int):
         else:
             tempo += ':' + n[:2]
         i += 1
-
+    '''
     return tempo
 
 
