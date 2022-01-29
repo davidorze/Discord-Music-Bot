@@ -15,18 +15,26 @@ import math
 import re
 import SettingEnvVar
 from random import random
-#import spotipy
-#from spotipy.oauth2 import SpotifyClientCredentials
+#from spotdl.console import console_entry_point
+#from spotdl.command_line.core import Spotdl
+#from spotdl.metadata.providers import ProviderSpotify
+from spotdl.authorize.services import AuthorizeSpotify
+#from spotdl.search.spotify_client import SpotifyClient
+from spotdl.search.song_object import SongObject
+from spotdl.search.song_gatherer import from_spotify_url
+from spotdl.helpers.spotify import SpotifyHelpers
+from spotdl import util
 import lyricsgenius as lg
 
 intents = discord.Intents.default()
 intents.members = True
 botToken = os.getenv('BOT_TOKEN')
 
-#auth_manager = SpotifyClientCredentials()
-#sp = spotipy.Spotify(auth_manager=auth_manager)
-#track = sp.track('https://open.spotify.com/track/6sH0zEauzk2ih4kGWQliQL?si=da7682a0355c47ec')
-#pprint(track)
+AuthorizeSpotify(
+    client_id=os.getenv('client_id'),
+    client_secret=os.getenv('client_secret'),
+)
+
 
 genius = lg.Genius(os.getenv('GENIUS_TOKEN'), skip_non_songs=True, excluded_terms=["(Remix)", "(Live)"], remove_section_headers=True)
 client = commands.Bot(command_prefix='\\', case_insensitive=True, intents=intents)
@@ -58,12 +66,7 @@ async def testplay(ctx, *, url: str):
     voice.play(discord.FFmpegPCMAudio(url, **FFMPEG_OPTS), after=lambda e: start_playing(canal, id , voice, ctx))
 
 
-
-#def check_queue(canal, id, voice):
-#    if queues[id] != []:
-#        start_playing(id, voice)
-
-def parse_duration(duration: int):
+async def parse_duration(duration: int):
     minutes, seconds = divmod(duration, 60)
     hours, minutes = divmod(minutes, 60)
     days, hours = divmod(hours, 24)
@@ -107,19 +110,33 @@ async def play(ctx, *, url: str):
     global queues
     id = ctx.guild.id
     userID = ctx.author.id
-    ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True, 'playlist_items':'1'}
+    try: 
+        url.index('spotify')
+        isSpotify = True
+    except:
+        isSpotify = False
+    if(isSpotify):
+        print('is')
+        try:
+            song = from_spotify_url(url)
+            url = song.youtube_link
+        except:
+            spotHelp = SpotifyHelpers()
+            playlist = spotHelp.fetch_playlist(url)
+            spotHelp.write_playlist_tracks(playlist, target_path=r'tracks.txt')
     async with ctx.channel.typing():
-     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-         video = ydl.extract_info(url, download=False)
-         #original_stdout = sys.stdout # Save a reference to the original standard output
-         #with open('output2.txt', 'wb') as f:
-         #    sys.stdout = f
-         #    sys.stdout = codecs.getwriter('utf8')(sys.stdout) # Change the standard output to the file we created.
-         #    pprint(video)
-         #    sys.stdout = original_stdout # Reset the standard output to its original value
-         #pprint(video)
-         create_playlist(video, id, userID, False)
-     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+        ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True, 'playlist_items':'1'}
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            video = ydl.extract_info(url, download=False)
+            #original_stdout = sys.stdout # Save a reference to the original standard output
+            #with open('output2.txt', 'wb') as f:
+            #    sys.stdout = f
+            #    sys.stdout = codecs.getwriter('utf8')(sys.stdout) # Change the standard output to the file we created.
+            #    pprint(video)
+            #    sys.stdout = original_stdout # Reset the standard output to its original value
+            #pprint(video)
+            await create_playlist(video, id, userID, False)
+    voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
     if (voice == None):
         await join(ctx)
         voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
@@ -140,7 +157,7 @@ async def play(ctx, *, url: str):
         ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True}
         with youtube_dl.YoutubeDL(ydl_opts) as ydl:
             video = ydl.extract_info(url, download=False)
-            create_playlist(video, id, userID, False)
+            await create_playlist(video, id, userID, False)
             await remove(ctx, 1, True)
 
 
@@ -173,7 +190,7 @@ async def search(ctx, *, url: str):
     except:
          await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
 
-def create_playlist(video, id, userID, isPlayNow):
+async def create_playlist(video, id, userID, isPlayNow):
     global infos
     global queues
     info = {}
@@ -234,9 +251,9 @@ def create_playlist(video, id, userID, isPlayNow):
         print('testando not YT')
         info[0] = video
     print('goingToAppend')
-    appendToList(info, id, userID, isPlayNow)
+    await appendToList(info, id, userID, isPlayNow)
 
-def appendToList(info, id, userID, isPlayNow):
+async def appendToList(info, id, userID, isPlayNow):
     global infos
     global queues
     i = 0
@@ -244,7 +261,7 @@ def appendToList(info, id, userID, isPlayNow):
         while i < len(info):
             queues[id].insert(0, info[i]['url'])
             try: 
-                tempo = parse_duration(info[i]['duration'])
+                tempo = await parse_duration(info[i]['duration'])
                 infos[id].insert(1, {'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'], 'duration': tempo, 'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']})
             except:
                 tempo = '∞'
@@ -254,7 +271,7 @@ def appendToList(info, id, userID, isPlayNow):
         while i < len(info):
             queues[id].append(info[i]['url'])
             try: 
-                tempo = parse_duration(info[i]['duration'])
+                tempo = await parse_duration(info[i]['duration'])
                 infos[id].append({'user': ('<@!'+str(userID)+'>'), 'song': info[i]['title'], 'duration': tempo, 'songId': info[i]['id'], 'url': info[i]['url'], 'artist': info[i]['artist']})
             except:
                 tempo = '∞'
@@ -269,7 +286,7 @@ async def askAfterSearch(video, id, userID, ctx):
         i = 1
         for song in video['entries']:
             try: 
-                tempo = parse_duration(song['duration'])
+                tempo = await parse_duration(song['duration'])
                 embed.add_field(name=str(i) + ' - ' + song['title'], value=('Duração: ' + tempo), inline=False)
             except:
                 tempo = '∞'
@@ -283,9 +300,9 @@ async def askAfterSearch(video, id, userID, ctx):
     except:
         await ctx.channel.send('Nenhuma música foi selecionada!', delete_after=60)
     video = video['entries'][int(msg.content)-1]
-    create_playlist(video, id, userID, False)
+    await create_playlist(video, id, userID, False)
 
-def start_playing(canal, id, voice, ctx):
+async def start_playing(canal, id, voice, ctx):
     global infos
     global queues
     FFMPEG_OPTS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
@@ -306,7 +323,7 @@ async def call_play(canal, id, voice, ctx):
     global infos
     global queues
     #FFMPEG_OPTS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-    start_playing(canal, id, voice, ctx)
+    await start_playing(canal, id, voice, ctx)
     #await canal.send('Fila terminou, adicione mais músicas!')
 
 @client.command(aliases=['next', 'sk'])
@@ -324,7 +341,7 @@ async def playnow(ctx, *, url: str):
     ydl_opts = {'format': 'best', 'default_search': 'ytsearch1', 'ignoreerrors': True}
     with youtube_dl.YoutubeDL(ydl_opts) as ydl:
         video = ydl.extract_info(url, download=False)
-    create_playlist(video, id, userID, True)
+    await create_playlist(video, id, userID, True)
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
     if (voice == None):
         await join(ctx)
@@ -403,7 +420,9 @@ async def remove(ctx, item: int, isDuplicate=False):
     if len(infos[id]) > item > 0:
         try:
             queues[id].pop(item-1)
-            if(not isDuplicate): await ctx.channel.send('Removendo música ' + str(infos[id].pop(item)['song']) + ' da lista!')
+            if(not isDuplicate):
+                await ctx.channel.send('Removendo música ' + str(infos[id].pop(item)['song']) + ' da lista!')
+            elif(isDuplicate): infos[id].pop(item-1)
         except:
             if(not isDuplicate): await ctx.channel.send('O Bot não tem nada na fila!')
     else:
@@ -457,7 +476,7 @@ async def lyrics(ctx):
 
 @client.event
 async def on_ready():
-    print('We have logged in as {0.user}'.format(client))
+    print('git-We have logged in as {0.user}'.format(client))
     
 
 
