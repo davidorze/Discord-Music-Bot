@@ -13,6 +13,7 @@ import datetime
 import time
 import math
 import re
+import threading
 import SettingEnvVar
 from random import random
 #from spotdl.console import console_entry_point
@@ -105,6 +106,87 @@ async def parse_duration(duration: int):
     '''
     return tempo
 
+def callingAsyncThread(ctx, url, isST, video):
+    if(isST):
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(changeSpotifyLinks(ctx))
+        loop.close()
+    else:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(retrieveYouTubeInfo(ctx, url, video))
+        loop.close()
+
+
+async def changeSpotifyLinks(ctx):
+    global infos
+    global queues
+    id = ctx.guild.id
+    userID = ctx.author.id
+    ydl_opts = {'format': 'best', 'default_search': 'ytsearch1',
+                'ignoreerrors': True, 'playlist_items': '1'}
+    with open('tracks.txt', 'r') as f:
+        lines = f.readlines()
+        with open('tracksYT.txt', 'w') as fYT:
+            for line in lines:
+                yt_url = from_spotify_url(line).youtube_link
+                fYT.write(yt_url)
+    with open('tracksYT.txt', 'r') as fYT:
+        #async with ctx.channel.typing():
+        lines = fYT.readlines()
+        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+            video = ydl.extract_info(lines.pop(0), download=False)
+            await create_playlist(video, id, userID, False)
+        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+        if (voice == None):
+            await join(ctx)
+        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+        try:
+            if not voice.is_playing():
+                #print('not playing')
+                if voice.is_paused():
+                    await resume(ctx)
+                else:
+                    # print('call')
+                    await call_play(ctx.channel, id, voice, ctx)
+                    await ctx.channel.send(infos[id][0]['song'] + ' está tocando!')
+            elif voice.is_playing():
+                j = len(infos[id])-1
+                await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!')
+                for url in lines:
+                    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                        video = ydl.extract_info(url, download=False)
+                        await create_playlist(video, id, userID, False)
+        except Exception as e:
+            print(e)
+            await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
+    #open('tracks.txt', 'w').close()
+    #open('tracksYT.txt', 'w').close()
+
+
+async def retrieveYouTubeInfo(ctx, url, video):
+    global infos
+    global queues
+    id = ctx.guild.id
+    userID = ctx.author.id
+    ydl_opts = {'format': 'best', 'default_search': 'ytsearch1',
+                'ignoreerrors': True, 'playlist_items': '1'}
+    #async with ctx.channel.typing():
+    with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+        video = ydl.extract_info(url, download=False)
+        # original_stdout = sys.stdout # Save a reference to the original standard output
+        # with open('output2.txt', 'wb') as f:
+        #    sys.stdout = f
+        #    sys.stdout = codecs.getwriter('utf8')(sys.stdout) # Change the standard output to the file we created.
+        #    pprint(video)
+        #    sys.stdout = original_stdout # Reset the standard output to its original value
+        # pprint(video)
+        print('baixou')
+        await create_playlist(video, id, userID, False)
+        print('criou')
+    
+
 
 @client.command(aliases=['j'], description='Faz o bot entrar em seu canal de voz atual')
 async def join(ctx):
@@ -113,8 +195,11 @@ async def join(ctx):
         channel = ctx.author.voice.channel
         print(channel)
         await channel.connect()
+        print('connect')
         checkIfAlone.start(ctx)
-    except:
+        print('start check')
+    except Exception as e:
+        print(e)
         if (discord.utils.get(client.voice_clients, guild=ctx.guild).is_playing()):
             await ctx.channel.send('O Bot já está conectado no canal ' + str(discord.utils.get(client.voice_clients, guild=ctx.guild).channel.name) + '!')
         else:
@@ -128,50 +213,62 @@ async def play(ctx, *, url: str):
     global queues
     id = ctx.guild.id
     userID = ctx.author.id
+    video = ''
     try: 
         url.index('spotify')
         isSpotify = True
     except:
         isSpotify = False
     if(isSpotify):
-        print('is')
-        try:
-            song = from_spotify_url(url)
-            url = song.youtube_link
-        except:
+        if('track' in url):
+            with open('tracks.txt', 'w') as f:
+                f.write(url)
+            #song = from_spotify_url(url)
+            #url = song.youtube_link
+        elif('playlist' in url):
+            print('pl')
             spotHelp = SpotifyHelpers()
             playlist = spotHelp.fetch_playlist(url)
             spotHelp.write_playlist_tracks(playlist, target_path=r'tracks.txt')
-    ydl_opts = {'format': 'best', 'default_search': 'ytsearch1',
-                'ignoreerrors': True, 'playlist_items': '1'}
-    async with ctx.channel.typing():
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            video = ydl.extract_info(url, download=False)
-            # original_stdout = sys.stdout # Save a reference to the original standard output
-            # with open('output2.txt', 'wb') as f:
-            #    sys.stdout = f
-            #    sys.stdout = codecs.getwriter('utf8')(sys.stdout) # Change the standard output to the file we created.
-            #    pprint(video)
-            #    sys.stdout = original_stdout # Reset the standard output to its original value
-            # pprint(video)
-            create_playlist(video, id, userID, False)
-        voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+        elif('album' in url):
+            print('al')
+            spotHelp = SpotifyHelpers()
+            album = spotHelp.fetch_album(url)
+            spotHelp.write_album_tracks(album, target_path=r'tracks.txt')
+        elif('artist' in url):
+            print('ar')
+            spotHelp = SpotifyHelpers()
+            albums = spotHelp.fetch_albums_from_artist(url)
+            spotHelp.write_all_albums(albums, target_path=r'tracks.txt')
+        else:
+            await ctx.channel.send('Link com formato errado, por favor, tente novamente!')
+        with open('tracks.txt', 'r') as f:
+            sp_url = f.readline().strip()
+            url = from_spotify_url(sp_url).youtube_link
+    YT_thread = threading.Thread(target=callingAsyncThread, args=(ctx, url, isSpotify, video))
+    YT_thread.start()
+    YT_thread.join()
+    print('carregando e continuou')
+    #pprint(video)
+    voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
     if (voice == None):
         await join(ctx)
         voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+    print('join, antes de play')
     try:
         if not voice.is_playing():
             #print('not playing')
             if voice.is_paused():
                 await resume(ctx)
             else:
-                # print('call')
+                print('call')
                 await call_play(ctx.channel, id, voice, ctx)
                 await ctx.channel.send(infos[id][0]['song'] + ' está tocando!')
         elif voice.is_playing():
             j = len(infos[id])-1
             await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!')
-    except:
+    except Exception as e:
+        print(e)
         await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
     if '_type' in video:
         ydl_opts = {'format': 'best', 'default_search': 'ytsearch1',
@@ -180,6 +277,7 @@ async def play(ctx, *, url: str):
             video = ydl.extract_info(url, download=False)
             await create_playlist(video, id, userID, False)
             await remove(ctx, 1, True)
+    
 
 
 @client.command(aliases=['s'])
@@ -210,7 +308,8 @@ async def search(ctx, *, url: str):
         elif voice.is_playing():
             j = len(infos[id])-1
             await ctx.channel.send(infos[id][j]['song'] + ' adicionada na fila!')
-    except:
+    except Exception as e:
+        print(e)
         await ctx.channel.send('Algo deu errado, por favor, tente novamente!', delete_after=60)
 
 async def create_playlist(video, id, userID, isPlayNow):
@@ -296,8 +395,9 @@ async def appendToList(info, id, userID, isPlayNow):
 
         tempo = '∞'
         try:
-            tempo = parse_duration(info[i]['duration'])
-        except:
+            tempo = await parse_duration(info[i]['duration'])
+        except Exception as e:
+            print(e)
             pass
 
         # Pega só os primeiros 20 letras para o titulo
@@ -349,19 +449,22 @@ async def askAfterSearch(video, id, userID, ctx):
 
     await create_playlist(video, id, userID, False)
 
-async def start_playing(canal, id, voice, ctx):
+def start_playing(canal, id, voice, ctx):
     global infos
     global queues
     FFMPEG_OPTS = {
         'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
     if (0 < len(queues[id])):
         try:
+            print('start')
             start[id] = time.time()
             voice.play(discord.FFmpegPCMAudio(queues[id].pop(
                 0), **FFMPEG_OPTS), after=lambda e: start_playing(canal, id, voice, ctx))
             if (len(queues[id])+2 == (len(infos[id]))):
                 infos[id].pop(0)
-        except:
+            print('tocou')
+        except Exception as e:
+            print(e)
             pass
     else:
         #loop = asyncio.new_event_loop()
@@ -375,7 +478,8 @@ async def call_play(canal, id, voice, ctx):
     global infos
     global queues
     #FFMPEG_OPTS = {'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5', 'options': '-vn'}
-    await start_playing(canal, id, voice, ctx)
+    print('call_play')
+    start_playing(canal, id, voice, ctx)
     # await canal.send('Fila terminou, adicione mais músicas!')
 
 @client.command(aliases=['next', 'sk'])
@@ -419,7 +523,7 @@ async def queue(ctx):
     try:
         await ctx.message.delete()
     except:
-        None
+        pass
     async with ctx.channel.typing():
         embed = discord.Embed(
             title="Fila", description="Essas são as próximas músicas a tocar:", color=0x7cb84f)
@@ -435,16 +539,16 @@ async def queue(ctx):
         else:
             for song in infos[id]:
                 if (i == 0) and song['artist'] != '':
-                    embed.add_field(name='Agora tocando:\n' + song['song'] + ' - ' + song['artist'] + '\nDuração: ' + str(datetime.timedelta(
-                        seconds=tempoSong[id])) + '/' + song['duration'], value=('Adicionado por: ' + song['user']), inline=False)
+                    embed.add_field(name=('Agora tocando:\n' + song['song'] + ' - ' + song['artist'] + '\nDuração: ' + str(datetime.timedelta(
+                        seconds=tempoSong[id])) + '/' + song['duration']), value=('Adicionado por: ' + song['user']), inline=False)
                 elif (i > 0) and song['artist'] != '':
-                    embed.add_field(name=str(i) + ' - ' + song['song'] + ' - ' + song['artist'] + '\nDuração: ' +
-                                    song['duration'], value=('Adicionado por: ' + song['user']), inline=False)
+                    embed.add_field(name=(str(i) + ' - ' + song['song'] + ' - ' + song['artist'] + '\nDuração: ' +
+                                    song['duration']), value=('Adicionado por: ' + song['user']), inline=False)
                 elif (i == 0) and song['artist'] == '':
-                    embed.add_field(name='Agora tocando:\n' + song['song'] + '\nDuração: ' + str(datetime.timedelta(
-                        seconds=tempoSong[id])) + '/' + song['duration'], value=('Adicionado por: ' + song['user']), inline=False)
+                    embed.add_field(name=('Agora tocando:\n' + song['song'] + '\nDuração: ' + str(datetime.timedelta(
+                        seconds=tempoSong[id])) + '/' + song['duration']), value=('Adicionado por: ' + song['user']), inline=False)
                 elif (i > 0) and song['artist'] == '':
-                    embed.add_field(name=str(i) + ' - ' + song['song'] + '\nDuração: ' + song['duration'], value=(
+                    embed.add_field(name=(str(i) + ' - ' + song['song'] + '\nDuração: ' + song['duration']), value=(
                         'Adicionado por: ' + song['user']), inline=False)
                 i += 1
         try:
@@ -621,4 +725,21 @@ async def on_command_error(ctx, error):
                 infos[id][0]['song'], infos[id][0]['artist'])
             await ctx.channel.send(song.lyrics)
 
+
+#def mainFunc():
+#    loopm = asyncio.new_event_loop()
+#    asyncio.set_event_loop(loopm)
+#    loopm.run_until_complete(client.run(botToken))
+    
+#async def mainFuncAsync():
 client.run(botToken)
+
+#async def start():
+#    await client.wait_until_ready()
+#    client.run(botToken)
+
+#client.loop.create_task(start())
+
+#main_thread = threading.Thread(target=mainFunc)
+#main_loop.start()
+#main_thread.join()
