@@ -27,6 +27,8 @@ from spotdl.helpers.spotify import SpotifyHelpers
 from spotdl import util
 import lyricsgenius as lg
 
+#in Linux, use NSCD
+
 intents = discord.Intents.default()
 intents.members = True
 botToken = os.getenv('BOT_TOKEN')
@@ -107,6 +109,7 @@ async def parse_duration(duration: int):
     return tempo
 
 def callingAsyncThread(ctx, url, isST, video):
+    print('calledNewThread')
     if(isST):
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -120,6 +123,7 @@ def callingAsyncThread(ctx, url, isST, video):
 
 
 async def changeSpotifyLinks(ctx):
+    print('isSpotify!')
     global infos
     global queues
     id = ctx.guild.id
@@ -130,14 +134,18 @@ async def changeSpotifyLinks(ctx):
         lines = f.readlines()
         with open('tracksYT.txt', 'w') as fYT:
             for line in lines:
-                yt_url = from_spotify_url(line).youtube_link
-                fYT.write(yt_url)
+                yt_url = from_spotify_url(line.strip())
+                fYT.write(yt_url.youtube_link)
     with open('tracksYT.txt', 'r') as fYT:
+        #Fisrturl = fYT.readline()
+        video = ''
+        await retrieveYouTubeInfo(ctx, Fisrturl, video)
         #async with ctx.channel.typing():
-        lines = fYT.readlines()
-        with youtube_dl.YoutubeDL(ydl_opts) as ydl:
-            video = ydl.extract_info(lines.pop(0), download=False)
-            await create_playlist(video, id, userID, False)
+        lines = fYT.readlines()[1:]
+        for line in lines:
+            with youtube_dl.YoutubeDL(ydl_opts) as ydl:
+                video = ydl.extract_info(line, download=False)
+                await create_playlist(video, id, userID, False)
         voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
         if (voice == None):
             await join(ctx)
@@ -200,9 +208,12 @@ async def join(ctx):
         print('start check')
     except Exception as e:
         print(e)
-        if (discord.utils.get(client.voice_clients, guild=ctx.guild).is_playing()):
-            await ctx.channel.send('O Bot já está conectado no canal ' + str(discord.utils.get(client.voice_clients, guild=ctx.guild).channel.name) + '!')
-        else:
+        try:
+            voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
+            if voice.is_playing():
+                await ctx.channel.send('O Bot já está conectado no canal ' + str(discord.utils.get(client.voice_clients, guild=ctx.guild).channel.name) + '!')
+        except Exception as e:
+            print(e)
             await ctx.channel.send('Você não está conectado em nenhum canal de voz! Conecte-se e tente novamente.')
     #channel = discord.utils.get(ctx.guild.voice_channels, name='geral')
 
@@ -220,6 +231,10 @@ async def play(ctx, *, url: str):
     except:
         isSpotify = False
     if(isSpotify):
+        with open('tracks.txt', 'w') as f:
+            print('erased tracks.txt')
+        with open('tracksYT.txt', 'w') as f:
+            print('erased tracksYT.txt')
         if('track' in url):
             with open('tracks.txt', 'w') as f:
                 f.write(url)
@@ -245,9 +260,9 @@ async def play(ctx, *, url: str):
         with open('tracks.txt', 'r') as f:
             sp_url = f.readline().strip()
             url = from_spotify_url(sp_url).youtube_link
-    YT_thread = threading.Thread(target=callingAsyncThread, args=(ctx, url, isSpotify, video))
+    YT_thread = threading.Thread(name='gettingLinks', target=callingAsyncThread, args=(ctx, url, isSpotify, video))
     YT_thread.start()
-    YT_thread.join()
+    #YT_thread.join()
     print('carregando e continuou')
     #pprint(video)
     voice = discord.utils.get(client.voice_clients, guild=ctx.guild)
@@ -277,7 +292,6 @@ async def play(ctx, *, url: str):
             video = ydl.extract_info(url, download=False)
             await create_playlist(video, id, userID, False)
             await remove(ctx, 1, True)
-    
 
 
 @client.command(aliases=['s'])
